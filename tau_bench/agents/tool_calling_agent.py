@@ -43,6 +43,7 @@ class ToolCallingAgent(Agent):
                 custom_llm_provider=self.provider,
                 tools=self.tools_info,
                 temperature=self.temperature,
+                timeout=1200,  # 20 minutes timeout for XAI Grok
             )
             next_message = res.choices[0].message.model_dump()
             total_cost += res._hidden_params["response_cost"] or 0

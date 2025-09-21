@@ -42,6 +42,7 @@ class ChatReActAgent(Agent):
             custom_llm_provider=self.provider,
             messages=messages,
             temperature=self.temperature,
+            timeout=1200,  # 20 minutes timeout for XAI Grok
         )
         message = res.choices[0].message
         action_str = message.content.split("Action:")[-1].strip()
