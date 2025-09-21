@@ -5,3 +5,4 @@ tau_bench/.DS_Store
 *.pyc
 tau_bench/envs/.DS_Store
 tau_bench/model_utils/.DS_Store
+/tau_bench.egg-info
