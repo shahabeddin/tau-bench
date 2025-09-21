@@ -1,1 +1,7 @@
 .DS_Store
+tau_bench/.env
+tau_bench/.DS_Store
+/tau_bench/__pycache__
+*.pyc
+tau_bench/envs/.DS_Store
+tau_bench/model_utils/.DS_Store
