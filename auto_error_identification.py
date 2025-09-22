@@ -23,10 +23,13 @@ def get_args() -> argparse.Namespace:
 
 class OriginalResult(BaseModel):
     task_id: int
+    trial: int
     user_instruction: str
     traj: List[Dict[str, Any]]
     ground_truth_actions: List[Action]
     ground_truth_outputs: List[str]
+    is_empty_trajectory: bool = False
+    error_info: str = ""
 
 class FaultAuthor(Enum):
     USER = "user"
@@ -35,32 +38,45 @@ class FaultAuthor(Enum):
 
 class FaultAssignmentResult(BaseModel):
     task_id: int
+    trial: int
     author: FaultAuthor
     description: str
+    is_empty_trajectory: bool = False
+    error_info: str = ""
 
     def model_dump(self) -> Dict[str, Any]:
         return {
             "task_id": self.task_id,
+            "trial": self.trial,
             "author": self.author.value,
             "description": self.description,
+            "is_empty_trajectory": self.is_empty_trajectory,
+            "error_info": self.error_info,
         }
 
 class FaultType(Enum):
     CALLED_WRONG_TOOL = "called_wrong_tool"
     USED_WRONG_TOOL_ARGUMENT = "used_wrong_tool_argument"
     GOAL_PARTIALLY_COMPLETED = "goal_partially_completed"
+    TIMEOUT_OR_API_ERROR = "timeout_or_api_error"
     OTHER = "other"
 
 class FaultTypeResult(BaseModel):
     task_id: int
+    trial: int
     fault_type: FaultType
     description: str
+    is_empty_trajectory: bool = False
+    error_info: str = ""
 
     def model_dump(self) -> Dict[str, Any]:
         return {
             "task_id": self.task_id,
+            "trial": self.trial,
             "fault_type": self.fault_type.value,
             "description": self.description,
+            "is_empty_trajectory": self.is_empty_trajectory,
+            "error_info": self.error_info,
         }
 
 class GradingStrategy(Enum):
@@ -82,7 +98,8 @@ def context_description(grading_strategy: GradingStrategy) -> str:
 
 def display_traj(traj: List[Dict[str, Any]]) -> str:
     if len(traj) == 0:
-        raise ValueError("Trajectory is empty")
+        print("ERROR: Trajectory is empty! This usually indicates a timeout, API failure, or other serious error.")
+        return "ERROR: Empty trajectory - likely due to timeout, API failure, or other system error"
     stripped_traj = [item for item in traj if item["role"] != "system"]
     return "\n".join([f"{item['role'].capitalize()}: {item['content']}" for item in stripped_traj])
 
@@ -113,7 +130,7 @@ def display_context(user_instruction: str, ground_truth_actions: List[Action], g
     return context
 
 def fault_assignment_analysis(api: API, results: List[OriginalResult], max_concurrency: int) -> List[FaultAssignmentResult]:
-    def assign_fault(task_id: int, user_instruction: str, traj: List[Dict[str, Any]], ground_truth_actions: List[Action], ground_truth_outputs: List[str]) -> FaultAssignmentResult:
+    def assign_fault(task_id: int, trial: int, user_instruction: str, traj: List[Dict[str, Any]], ground_truth_actions: List[Action], ground_truth_outputs: List[str], is_empty_trajectory: bool, error_info: str) -> FaultAssignmentResult:
         idx_to_author = {
             0: FaultAuthor.USER,
             1: FaultAuthor.AGENT,
@@ -132,19 +149,36 @@ def fault_assignment_analysis(api: API, results: List[OriginalResult], max_concu
             instruction=f"{ctx_desc}\n\nDescribe the reason why {author.value} is responsible for the fault in the trajectory. Be concise and only focus on the functional differences between the ground truth and the trajectory.",
             text=context,
         )
-        return FaultAssignmentResult(task_id=task_id, author=author, description=description)
+        return FaultAssignmentResult(task_id=task_id, trial=trial, author=author, description=description, is_empty_trajectory=is_empty_trajectory, error_info=error_info)
     with ThreadPoolExecutor(max_workers=max_concurrency) as executor:
         task_ids = [r.task_id for r in results]
+        trials = [r.trial for r in results]
         user_instructions = [r.user_instruction for r in results]
         trajs = [r.traj for r in results]
         ground_truth_actions = [r.ground_truth_actions for r in results]
         ground_truth_outputs = [r.ground_truth_outputs for r in results]
-        results = list(executor.map(assign_fault, task_ids, user_instructions, trajs, ground_truth_actions, ground_truth_outputs))
+        is_empty_trajectories = [r.is_empty_trajectory for r in results]
+        error_infos = [r.error_info for r in results]
+        results = list(executor.map(assign_fault, task_ids, trials, user_instructions, trajs, ground_truth_actions, ground_truth_outputs, is_empty_trajectories, error_infos))
     return results
 
 
 def fault_type_analysis(api: API, results: List[OriginalResult], max_concurrency: int) -> List[FaultTypeResult]:
-    def get_fault_type(task_id: int, user_instruction: str, traj: List[Dict[str, Any]], ground_truth_actions: List[Action], ground_truth_outputs: List[str]) -> FaultTypeResult:
+    def get_fault_type(task_id: int, trial: int, user_instruction: str, traj: List[Dict[str, Any]], ground_truth_actions: List[Action], ground_truth_outputs: List[str], is_empty_trajectory: bool, error_info: str) -> FaultTypeResult:
+        # Handle empty trajectories as timeout/API errors
+        if is_empty_trajectory:
+            description = "Empty trajectory indicates a timeout, API failure, or other system error that prevented the agent from generating any response."
+            if error_info:
+                description += f" Error details: {error_info}"
+            return FaultTypeResult(
+                task_id=task_id, 
+                trial=trial, 
+                fault_type=FaultType.TIMEOUT_OR_API_ERROR, 
+                description=description,
+                is_empty_trajectory=is_empty_trajectory,
+                error_info=error_info
+            )
+        
         idx_to_fault_type = {
             0: FaultType.CALLED_WRONG_TOOL,
             1: FaultType.USED_WRONG_TOOL_ARGUMENT,
@@ -164,14 +198,17 @@ def fault_type_analysis(api: API, results: List[OriginalResult], max_concurrency
             instruction=f"{ctx_desc}\n\nDescribe the reason why the following trajectory contains a fault of type \"{fault_type.value}\". Be concise and only focus on the functional differences between the ground truth and the trajectory.",
             text=context,
         )
-        return FaultTypeResult(task_id=task_id, fault_type=fault_type, description=description)
+        return FaultTypeResult(task_id=task_id, trial=trial, fault_type=fault_type, description=description, is_empty_trajectory=is_empty_trajectory, error_info=error_info)
     with ThreadPoolExecutor(max_workers=max_concurrency) as executor:
         task_ids = [r.task_id for r in results]
+        trials = [r.trial for r in results]
         user_instructions = [r.user_instruction for r in results]
         trajs = [r.traj for r in results]
         ground_truth_actions = [r.ground_truth_actions for r in results]
         ground_truth_outputs = [r.ground_truth_outputs for r in results]
-        results = list(executor.map(get_fault_type, task_ids, user_instructions, trajs, ground_truth_actions, ground_truth_outputs))
+        is_empty_trajectories = [r.is_empty_trajectory for r in results]
+        error_infos = [r.error_info for r in results]
+        results = list(executor.map(get_fault_type, task_ids, trials, user_instructions, trajs, ground_truth_actions, ground_truth_outputs, is_empty_trajectories, error_infos))
     return results
 
 def main() -> None:
@@ -193,20 +230,41 @@ def main() -> None:
         print(f"Limiting to {args.max_num_failed_results} failed trajectories")
         failed_results = failed_results[:args.max_num_failed_results]
     original_results = []
+    empty_trajectories = 0
     for result in failed_results:
         task_id: int = result["task_id"]
+        trial: int = result.get("trial", 0)  # Default to 0 if trial not present
         task = tasks[task_id]
         user_instruction = task.instruction
         ground_truth_actions = task.actions
         ground_truth_outputs = task.outputs
-        original_result = OriginalResult(task_id=task_id, user_instruction=user_instruction, traj=result["traj"], ground_truth_actions=ground_truth_actions, ground_truth_outputs=ground_truth_outputs)
+        
+        # Check for empty trajectory and extract error info
+        is_empty_trajectory = len(result["traj"]) == 0
+        error_info = ""
+        if is_empty_trajectory:
+            empty_trajectories += 1
+            print(f"ERROR: Empty trajectory found for task_id={task_id}, trial={trial}")
+            # Extract error information if available
+            if "info" in result and "error" in result["info"]:
+                error_info = result["info"]["error"]
+                print(f"  Error details: {error_info[:100]}...")  # Show first 100 chars
+        
+        original_result = OriginalResult(task_id=task_id, trial=trial, user_instruction=user_instruction, traj=result["traj"], ground_truth_actions=ground_truth_actions, ground_truth_outputs=ground_truth_outputs, is_empty_trajectory=is_empty_trajectory, error_info=error_info)
         original_results.append(original_result)
+    
+    if empty_trajectories > 0:
+        print(f"WARNING: Found {empty_trajectories} empty trajectories out of {len(failed_results)} failed results. These likely indicate timeouts or API failures.")
     print(f"Performing fault assignment analysis on {len(original_results)} failed trajectories with a max concurrency of {args.max_concurrency}...")
     fault_assignment_results = fault_assignment_analysis(api=api, results=original_results, max_concurrency=args.max_concurrency)
     failures_due_to_agent = [original_results[i] for i, r in enumerate(fault_assignment_results) if r.author == FaultAuthor.AGENT]
     print(f"Performing fault type analysis on {len(failures_due_to_agent)} failures that have been marked as being caused by the agent with a max concurrency of {args.max_concurrency}...")
     fault_type_results = fault_type_analysis(api=api, results=failures_due_to_agent, max_concurrency=args.max_concurrency)
     print(f"""Reviewed {len(fault_assignment_results)} trajectories:
+
+Empty trajectory statistics:
+  - Empty trajectories: {sum(1 for r in fault_assignment_results if r.is_empty_trajectory)} ({round(sum(1 for r in fault_assignment_results if r.is_empty_trajectory) / len(fault_assignment_results) * 100, 2)}%)
+  - Non-empty trajectories: {sum(1 for r in fault_assignment_results if not r.is_empty_trajectory)} ({round(sum(1 for r in fault_assignment_results if not r.is_empty_trajectory) / len(fault_assignment_results) * 100, 2)}%)
 
 Author fault distribution:
   - User: {sum(1 for r in fault_assignment_results if r.author == FaultAuthor.USER)} ({round(sum(1 for r in fault_assignment_results if r.author == FaultAuthor.USER) / len(fault_assignment_results) * 100, 2)}%)
@@ -217,6 +275,7 @@ Fault type distribution (only failures marked as being caused by the agent):
   - Called wrong tool: {sum(1 for r in fault_type_results if r.fault_type == FaultType.CALLED_WRONG_TOOL)} ({round(sum(1 for r in fault_type_results if r.fault_type == FaultType.CALLED_WRONG_TOOL) / len(fault_type_results) * 100, 2)}%)
   - Used wrong tool argument: {sum(1 for r in fault_type_results if r.fault_type == FaultType.USED_WRONG_TOOL_ARGUMENT)} ({round(sum(1 for r in fault_type_results if r.fault_type == FaultType.USED_WRONG_TOOL_ARGUMENT) / len(fault_type_results) * 100, 2)}%)
   - Goal partially completed: {sum(1 for r in fault_type_results if r.fault_type == FaultType.GOAL_PARTIALLY_COMPLETED)} ({round(sum(1 for r in fault_type_results if r.fault_type == FaultType.GOAL_PARTIALLY_COMPLETED) / len(fault_type_results) * 100, 2)}%)
+  - Timeout or API error: {sum(1 for r in fault_type_results if r.fault_type == FaultType.TIMEOUT_OR_API_ERROR)} ({round(sum(1 for r in fault_type_results if r.fault_type == FaultType.TIMEOUT_OR_API_ERROR) / len(fault_type_results) * 100, 2)}%)
   - Other: {sum(1 for r in fault_type_results if r.fault_type == FaultType.OTHER)} ({round(sum(1 for r in fault_type_results if r.fault_type == FaultType.OTHER) / len(fault_type_results) * 100, 2)}%)
 """)
     with open(args.output_path, "w") as f:
