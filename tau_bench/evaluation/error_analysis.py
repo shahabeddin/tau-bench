@@ -159,7 +159,9 @@ class ErrorAnalyzer:
         for message in conversation:
             if message.get('role') == 'assistant':
                 content = message.get('content', '')
-                
+                if not content or not isinstance(content, str):
+                    continue
+                    
                 # Check for error patterns
                 for error_type, error_config in self.error_patterns.items():
                     for pattern in error_config['patterns']:

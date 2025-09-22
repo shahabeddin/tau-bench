@@ -100,14 +100,17 @@ class EfficiencyTracker:
             self.response_times.append(response_time)
         elif message.get('role') == 'assistant':
             # Estimate response time based on content length (rough approximation)
-            estimated_time = max(0.5, len(str(message.get('content', ''))) / 1000)  # ~1ms per character
-            self.response_times.append(estimated_time)
+            content = message.get('content', '')
+            if content and isinstance(content, str):
+                estimated_time = max(0.5, len(content) / 1000)  # ~1ms per character
+                self.response_times.append(estimated_time)
         
         # Check for transfer to human
         if message.get('role') == 'assistant':
             content = message.get('content', '')
-            if 'transfer_to_human' in content.lower() or 'human agent' in content.lower():
-                self.transfer_to_human = True
+            if content and isinstance(content, str):
+                if 'transfer_to_human' in content.lower() or 'human agent' in content.lower():
+                    self.transfer_to_human = True
                 
     def calculate_metrics(self) -> EfficiencyMetrics:
         """Calculate comprehensive efficiency metrics"""
@@ -226,7 +229,7 @@ class EfficiencyTracker:
     def _estimate_tokens(self, message: Dict[str, Any]) -> int:
         """Estimate token count from message content"""
         content = message.get('content', '')
-        if not content:
+        if not content or not isinstance(content, str):
             return 0
             
         # Rough estimation: ~4 characters per token for English text

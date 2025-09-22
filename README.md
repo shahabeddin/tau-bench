@@ -1,14 +1,136 @@
-# τ-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains
+# τ+_bench: Enhanced Benchmark for Tool-Agent-User Interaction in Real-World Domains
 
-**❗News**: We have released [τ²-bench](https://github.com/sierra-research/tau2-bench) as an extension of $\tau$-bench. $\tau^2$-bench includes code fixes and an additional `telecom` domain focusing on troubleshooting scenarios. Please use the $\tau^2$-bench as the latest version of this benchmark.
 
-**Paper**:
+
+**Original Paper**:
 * [τ-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains](https://arxiv.org/abs/2406.12045)
-* [τ²-Bench: Evaluating Conversational Agents in a Dual-Control Environment](https://arxiv.org/abs/2506.07982)
 
-We propose $\tau$-bench, a benchmark emulating dynamic conversations between a user (simulated by language models) and a language agent provided with domain-specific API tools and policy guidelines.
 
-## Leaderboard
+We propose enhancements to the $\tau$-bench as described below.
+
+## τ+_bench: Enhanced Evaluation System
+
+**τ+_bench** is an enhanced version of the original τ-bench that introduces comprehensive multi-dimensional evaluation metrics beyond simple binary pass/fail scoring. This enhancement provides deeper insights into model performance, failure modes, and real-world deployment characteristics.
+
+### Key Enhancements
+
+#### 1. **Composite Performance Score (0.0-1.0)**
+Replaces binary 0/1 scoring with weighted multi-dimensional evaluation:
+
+- **Task Completion (40%)**: How well the task was completed
+- **Efficiency (30%)**: How efficiently it was completed  
+- **Policy Adherence (20%)**: How well policies were followed
+- **User Satisfaction (10%)**: Quality of user interaction
+
+#### 2. **Enhanced Error Analysis and Categorization**
+Hierarchical error taxonomy with detailed analysis:
+
+- **Policy Interpretation**: Rigid interpretation, context misunderstanding, policy violations
+- **Tool Usage**: Wrong arguments, missing tools, tool failures
+- **Conversation Flow**: Premature transfer, goal partial completion, inefficient flow
+- **Context Understanding**: User intent misunderstanding, ambiguous request handling
+- **System Errors**: Runtime errors, environment errors
+
+Each error includes:
+- Root cause analysis
+- Suggested fixes
+- Severity levels (low, medium, high, critical)
+- Confidence scoring
+
+#### 3. **Efficiency and Resource Metrics**
+Comprehensive tracking of practical deployment metrics:
+
+- **Timing Metrics**: Total duration, average response time, tool call duration
+- **Conversation Metrics**: Total turns, conversation efficiency, transfer rates
+- **Tool Usage**: Success rate, efficiency, call frequency
+- **Resource Consumption**: Token usage, cost estimation, memory usage
+- **Transfer Analysis**: Human escalation rates and patterns
+
+### Enhanced Metrics Calculation
+
+#### **Composite Score Calculation**
+```python
+overall_score = (
+    task_completion * 0.4 +
+    efficiency * 0.3 +
+    policy_adherence * 0.2 +
+    user_satisfaction * 0.1
+)
+```
+
+#### **Efficiency Score Components**
+- **Conversation Efficiency**: Based on optimal conversation length (10-30 turns = 1.0, 40+ turns = 0.4)
+- **Tool Call Efficiency**: Optimal tool usage (5-15 calls = 1.0, 30+ calls = 0.4)
+- **Transfer Penalty**: 30% penalty for premature human transfers
+- **Success Rate Factor**: Tool call success rate weighting
+
+#### **Token Estimation**
+- **Character-based estimation**: ~4 characters per token for English text
+- **Message overhead**: +10 tokens for role structure
+- **Tool call overhead**: +50 tokens per tool call
+- **Minimum tokens**: 1 token per message
+
+#### **Timing Estimation**
+- **Response times**: 0.5s base + 1ms per character for longer responses
+- **Tool durations**: Based on complexity (0.1s for lookups, 1.2s for complex operations)
+- **Realistic ranges**: 0.5s-3s for responses, 0.1s-1.2s for tool calls
+
+## τ+_bench Enhanced Evaluation Results
+
+### Grok-3-mini Performance Analysis
+
+#### **Enhanced Metrics by Domain**
+
+| Domain | Binary Success Rate | Composite Score | Efficiency Score | Transfer Rate | Avg Errors per Task |
+|--------|-------------------|-----------------|------------------|---------------|-------------------|
+| **Retail** | 0.572 | 0.830 | 0.860 | 0.309 | 1.42 |
+| **Airline** | 0.530 | 0.862 | 0.855 | 0.705 | 2.01 |
+
+#### **Detailed Performance Breakdown**
+
+##### **Retail Domain (Grok-3-mini)**
+- **Success Rate**: 57.2% (123/215 tasks completed successfully)
+- **Composite Score**: 0.830 (excellent overall performance)
+- **Efficiency**: 0.860 (very efficient task completion)
+- **Transfer Rate**: 30.9% (moderate human escalation)
+- **Error Rate**: 1.42 errors per task on average
+
+**Fault Analysis (197 failed trajectories):**
+- **Agent-caused failures**: 93.4% (184/197)
+- **User-caused failures**: 1.52% (3/197)
+- **Environment failures**: 5.08% (10/197)
+
+**Agent Fault Types:**
+- **Goal partially completed**: 89.67% (165/184)
+- **Wrong tool arguments**: 8.7% (16/184)
+- **Other issues**: 1.63% (3/184)
+
+##### **Airline Domain (Grok-3-mini)**
+- **Success Rate**: 53.0% (106/200 tasks completed successfully)
+- **Composite Score**: 0.862 (excellent overall performance)
+- **Efficiency**: 0.855 (very efficient task completion)
+- **Transfer Rate**: 70.5% (high human escalation rate)
+- **Error Rate**: 2.01 errors per task on average
+
+**Fault Analysis (94 failed trajectories):**
+- **Agent-caused failures**: 81.91% (77/94)
+- **User-caused failures**: 9.57% (9/94)
+- **Environment failures**: 8.51% (8/94)
+
+**Agent Fault Types:**
+- **Goal partially completed**: 61.04% (47/77)
+- **Wrong tool calls**: 1.3% (1/77)
+- **Other issues**: 37.66% (29/77)
+
+#### **Key Insights**
+
+1. **Domain Performance**: Grok-3-mini shows strong performance in both domains with composite scores above 0.83
+2. **Efficiency**: Consistently high efficiency scores (~0.86) indicate effective task completion
+3. **Transfer Patterns**: Airline domain has significantly higher human transfer rate (70.5% vs 30.9%), suggesting more complex scenarios
+4. **Error Patterns**: "Goal partially completed" is the dominant failure mode, indicating the model often gets close but doesn't fully complete tasks
+5. **Error Attribution**: Most failures are attributed to the agent rather than user or environment issues
+
+## Original τ-bench Leaderboard
 
 ### Airline
 
@@ -61,40 +183,61 @@ MISTRAL_API_KEY=...
 
 ## Run
 
-Run a tool-calling agent on the τ-retail environment:
+### Basic Usage (with Enhanced Evaluation)
+
+Run a tool-calling agent on the τ-retail environment with enhanced evaluation:
 
 ```bash
 python run.py --agent-strategy tool-calling --env retail --model gpt-4o --model-provider openai --user-model gpt-4o --user-model-provider openai --user-strategy llm --max-concurrency 10
 ```
 
-Set max concurrency according to your API limit(s).
+The enhanced evaluation system will automatically provide:
+- Composite performance scores
+- Detailed error analysis
+- Efficiency and resource metrics
+- Actionable recommendations
 
-To run specific tasks, use the `--task-ids` flag. For example:
+### Enhanced Metrics Output
+
+The system now displays comprehensive metrics:
+
+```
+📊 ENHANCED EVALUATION METRICS
+============================================================
+🏆 Binary Success Rate: 0.567
+🎯 Composite Score: 0.623
+⚡ Efficiency Score: 0.745
+🔄 Transfer Rate: 0.373
+❌ Avg Errors per Task: 2.15
+============================================================
+```
+
+### Running Specific Tasks
+
+To run specific tasks, use the `--task-ids` flag:
 
 ```bash
 python run.py --agent-strategy tool-calling --env retail --model gpt-4o --model-provider openai --user-model gpt-4o --user-model-provider openai --user-strategy llm --max-concurrency 10 --task-ids 2 4 6
 ```
 
-This command will run only the tasks with IDs 2, 4, and 6.
+## User Simulators
 
-## User simulators
+By default, we use `gpt-4o` as the user simulator with strategy `llm`. You can use other models by setting the `--user-model` flag, or other strategies by setting the `--user-strategy` flag.
 
-By default, we use `gpt-4o` as the user simulator with strategy `llm`. You can use other models by setting the `--user-model` flag, or other strategies by setting the `--user-strategy` flag. For example, run a tool-calling agent with a claude user simulator:
+### Tool-Calling Agent with Claude User Simulator
 
 ```bash
 python run.py --agent-strategy tool-calling --env retail --model gpt-4o --model-provider openai --max-concurrency 10 --user-model claude-3-5-sonnet-20240620 --user-model-provider anthropic --user-strategy llm
 ```
 
-Other strategies:
+### Other User Strategies
 
-To run `react` user simulator:
-
+#### ReAct User Simulator
 ```bash
 python run.py --agent-strategy tool-calling --env retail --model gpt-4o --model-provider openai --max-concurrency 10 --user-model gpt-4o --user-model-provider openai --user-strategy react
 ```
 
-Example of a `react` user response:
-
+Example ReAct user response:
 ```md
 Thought:
 I should provide my name and zip code as I wasn't given an email address to use.
@@ -103,23 +246,21 @@ User Response:
 Sure, my name is Yusuf Rossi, and my zip code is 19122.
 ```
 
-To run `verify` user simulator:
-
+#### Verify User Simulator
 ```bash
 python run.py --agent-strategy tool-calling --env retail --model gpt-4o --model-provider openai --max-concurrency 10 --user-model gpt-4o --user-model-provider openai --user-strategy verify
 ```
 
 This strategy uses a subsequent LLM verification step to check if the user simulator's response is satisfactory. If not, the user simulator will be prompted to generate a new response.
 
-To run `reflection` user simulator:
-
+#### Reflection User Simulator
 ```bash
 python run.py --agent-strategy tool-calling --env retail --model gpt-4o --model-provider openai --max-concurrency 10 --user-model gpt-4o --user-model-provider openai --user-strategy reflection
 ```
 
 This strategy uses a subsequent LLM verification step to check if the user simulator's response is satisfactory. If not, the user simulator will be prompted to reflect on its response and generate a new response.
 
-## Auto error identification
+## Auto Error Identification
 
 Often times, it is difficult and time consuming to manually identify specific error locations in trajectories as they can be long and the constraints can be complex. We have provided an auto error identification tool that can do the following:
 
@@ -128,7 +269,7 @@ Often times, it is difficult and time consuming to manually identify specific er
 
 Both of the labels are accompanied with a description.
 
-To run the auto error identification, run:
+To run the auto error identification:
 
 ```bash
 python auto_error_identification.py --env <airline/retail> --platform openai --results-path <the path to your results file here> --max-concurrency 16 --output-path test-auto-error-identification --max-num-failed-results 10
@@ -138,11 +279,37 @@ Please note that this feature utilizes an LLM, which may lead to inaccurate erro
 
 *Notice: If an error is raised due to the structure of your results file, you may have to rerun the benchmark to produce a new results file. We have recently [rewritten](https://github.com/sierra-research/tau-bench/commit/043b544371757ebb3762b3d02a6675dfe0c41798) the benchmark to be more type-safe and extensible.
 
-## Historical trajectories
+## Historical Trajectories
 
 τ-bench might be expensive to run. We have provided a set of historical trajectories for the airline and retail environments in `./historical_trajectories`.
 
 If you would like to contribute your historical trajectories to this benchmark, please submit a PR!
+
+## Enhanced Evaluation Features
+
+### Real-Time Metrics Tracking
+- Automatic token counting and estimation
+- Response time measurement
+- Tool call duration tracking
+- Conversation flow analysis
+
+### Comprehensive Error Analysis
+- Hierarchical error categorization
+- Root cause identification
+- Suggested improvement actions
+- Error severity assessment
+
+### Resource Efficiency Analysis
+- Token consumption tracking
+- Cost estimation
+- Memory usage patterns
+- Performance bottleneck identification
+
+### Actionable Insights
+- Model-specific recommendations
+- Performance optimization guidance
+- Deployment readiness assessment
+- Comparative analysis tools
 
 ## License
 

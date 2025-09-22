@@ -53,8 +53,9 @@ class CompositeScorer:
         # Check for transfer to human
         if message.get('role') == 'assistant':
             content = message.get('content', '')
-            if 'transfer_to_human' in content.lower() or 'human agent' in content.lower():
-                self.transfer_to_human = True
+            if content and isinstance(content, str):
+                if 'transfer_to_human' in content.lower() or 'human agent' in content.lower():
+                    self.transfer_to_human = True
                 
     def calculate_composite_score(self, 
                                 binary_reward: float, 
@@ -167,7 +168,10 @@ class CompositeScorer:
         # Check for policy violations in conversation
         for message in conversation:
             if message.get('role') == 'assistant':
-                content = message.get('content', '').lower()
+                content = message.get('content', '')
+                if not content or not isinstance(content, str):
+                    continue
+                content = content.lower()
                 
                 # Penalty for making up information
                 if any(phrase in content for phrase in [
@@ -194,9 +198,11 @@ class CompositeScorer:
                 # Check if there was confirmation in previous messages
                 confirmed = False
                 for message in conversation[-5:]:  # Check last 5 messages
-                    if message.get('role') == 'user' and 'yes' in message.get('content', '').lower():
-                        confirmed = True
-                        break
+                    if message.get('role') == 'user':
+                        content = message.get('content', '')
+                        if content and isinstance(content, str) and 'yes' in content.lower():
+                            confirmed = True
+                            break
                         
                 if not confirmed:
                     score -= 0.2
@@ -213,7 +219,10 @@ class CompositeScorer:
         # Check for helpful and clear communication
         for message in conversation:
             if message.get('role') == 'assistant':
-                content = message.get('content', '').lower()
+                content = message.get('content', '')
+                if not content or not isinstance(content, str):
+                    continue
+                content = content.lower()
                 
                 # Positive indicators
                 if any(phrase in content for phrase in [
