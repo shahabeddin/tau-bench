@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from tau_bench.envs import get_env
 from tau_bench.agents.base import Agent
 from tau_bench.types import EnvRunResult, RunConfig
+from tau_bench.evaluation import EnhancedEvaluator
 from litellm import provider_list
 from tau_bench.envs.user import UserStrategy
 
@@ -44,6 +45,7 @@ def run(config: RunConfig) -> List[EnvRunResult]:
         wiki=env.wiki,
         config=config,
     )
+    
     end_index = (
         len(env.tasks) if config.end_index == -1 else min(config.end_index, len(env.tasks))
     )
@@ -74,29 +76,61 @@ def run(config: RunConfig) -> List[EnvRunResult]:
             )
 
             print(f"Running task {idx}")
+            
+            # Create fresh enhanced evaluator for each task
+            enhanced_evaluator = EnhancedEvaluator()
+            enhanced_evaluator.start_evaluation(idx, i)
+            
             try:
                 res = agent.solve(
                     env=isolated_env,
                     task_index=idx,
                 )
+                
+                # Perform enhanced evaluation
+                enhanced_result = enhanced_evaluator.evaluate_task(
+                    binary_reward=res.reward,
+                    conversation=res.messages,
+                    task_actions=[action.dict() for action in isolated_env.task.actions],
+                    actual_actions=[action.dict() for action in isolated_env.actions],
+                    error_info=None
+                )
+                
                 result = EnvRunResult(
                     task_id=idx,
                     reward=res.reward,
                     info=res.info,
                     traj=res.messages,
                     trial=i,
+                    enhanced_evaluation=enhanced_result.dict()
                 )
             except Exception as e:
+                # Enhanced evaluation for failed tasks
+                enhanced_result = enhanced_evaluator.evaluate_task(
+                    binary_reward=0.0,
+                    conversation=[],
+                    task_actions=[action.dict() for action in isolated_env.task.actions],
+                    actual_actions=[],
+                    error_info={"error": str(e), "traceback": traceback.format_exc()}
+                )
+                
                 result = EnvRunResult(
                     task_id=idx,
                     reward=0.0,
                     info={"error": str(e), "traceback": traceback.format_exc()},
                     traj=[],
                     trial=i,
+                    enhanced_evaluation=enhanced_result.dict()
                 )
+            
+            # Display enhanced metrics
+            composite_score = enhanced_result.composite_score.overall_score
+            efficiency = enhanced_result.efficiency_metrics.overall_efficiency
             print(
                 "✅" if result.reward == 1 else "❌",
                 f"task_id={idx}",
+                f"composite_score={composite_score:.3f}",
+                f"efficiency={efficiency:.3f}",
                 result.info,
             )
             print("-----")
@@ -184,7 +218,38 @@ def display_metrics(results: List[EnvRunResult]) -> None:
     num_trials = len(set([r.trial for r in results]))
     rewards = [r.reward for r in results]
     avg_reward = sum(rewards) / len(rewards)
-    # c from https://arxiv.org/pdf/2406.12045
+    
+    # Enhanced metrics
+    enhanced_results = [r for r in results if r.enhanced_evaluation is not None]
+    
+    if enhanced_results:
+        # Composite scores
+        composite_scores = [r.enhanced_evaluation['composite_score']['overall_score'] for r in enhanced_results]
+        avg_composite_score = sum(composite_scores) / len(composite_scores)
+        
+        # Efficiency metrics
+        efficiency_scores = [r.enhanced_evaluation['efficiency_metrics']['overall_efficiency'] for r in enhanced_results]
+        avg_efficiency = sum(efficiency_scores) / len(efficiency_scores)
+        
+        # Transfer rate
+        transfer_count = sum(1 for r in enhanced_results if r.enhanced_evaluation['efficiency_metrics']['transfer_to_human'])
+        transfer_rate = transfer_count / len(enhanced_results)
+        
+        # Error analysis
+        total_errors = sum(len(r.enhanced_evaluation['errors']) for r in enhanced_results)
+        avg_errors_per_task = total_errors / len(enhanced_results)
+        
+        print("=" * 60)
+        print("📊 ENHANCED EVALUATION METRICS")
+        print("=" * 60)
+        print(f"🏆 Binary Success Rate: {avg_reward:.3f}")
+        print(f"🎯 Composite Score: {avg_composite_score:.3f}")
+        print(f"⚡ Efficiency Score: {avg_efficiency:.3f}")
+        print(f"🔄 Transfer Rate: {transfer_rate:.3f}")
+        print(f"❌ Avg Errors per Task: {avg_errors_per_task:.2f}")
+        print("=" * 60)
+    
+    # Original metrics
     c_per_task_id: dict[int, int] = {}
     for result in results:
         if result.task_id not in c_per_task_id:
@@ -197,7 +262,7 @@ def display_metrics(results: List[EnvRunResult]) -> None:
         for c in c_per_task_id.values():
             sum_task_pass_hat_k += comb(c, k) / comb(num_trials, k)
         pass_hat_ks[k] = sum_task_pass_hat_k / len(c_per_task_id)
-    print(f"🏆 Average reward: {avg_reward}")
-    print("📈 Pass^k")
+    
+    print("📈 Pass^k (Original Metrics)")
     for k, pass_hat_k in pass_hat_ks.items():
         print(f"  k={k}: {pass_hat_k}")

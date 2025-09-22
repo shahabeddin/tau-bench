@@ -67,6 +67,8 @@ class EnvRunResult(BaseModel):
     info: Dict[str, Any]
     traj: List[Dict[str, Any]]
     trial: int
+    # Enhanced evaluation fields
+    enhanced_evaluation: Optional[Dict[str, Any]] = None
 
 
 class RunConfig(BaseModel):
