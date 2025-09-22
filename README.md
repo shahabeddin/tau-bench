@@ -77,19 +77,21 @@ overall_score = (
 
 ## τ+_bench Enhanced Evaluation Results
 
-### Grok-3-mini Performance Analysis
+### Model Performance Analysis
 
-#### **Enhanced Metrics by Domain**
+#### **Enhanced Metrics by Domain and Model**
 
-| Domain | Binary Success Rate | Composite Score | Efficiency Score | Transfer Rate | Avg Errors per Task |
-|--------|-------------------|-----------------|------------------|---------------|-------------------|
-| **Retail** | 0.572 | 0.830 | 0.860 | 0.309 | 1.42 |
-| **Airline** | 0.530 | 0.862 | 0.855 | 0.705 | 2.01 |
+| Model | Domain | Binary Success Rate | Composite Score | Efficiency Score | Transfer Rate | Avg Errors per Task |
+|-------|--------|-------------------|-----------------|------------------|---------------|-------------------|
+| **Grok-3-mini** | Retail | 0.572 | 0.830 | 0.860 | 0.309 | 1.42 |
+| **Grok-3-mini** | Airline | 0.530 | 0.862 | 0.855 | 0.705 | 2.01 |
+| **GPT-4o-mini** | Retail | 0.326 | 0.814 | 0.885 | 0.028 | 1.86 |
+| **GPT-4o-mini** | Airline | 0.260 | 0.836 | 0.882 | 0.180 | 1.93 |
 
 #### **Detailed Performance Breakdown**
 
-##### **Retail Domain (Grok-3-mini)**
-- **Success Rate**: 57.2% (123/215 tasks completed successfully)
+##### **Retail Domain - Grok-3-mini**
+- **Success Rate**: 57.2% (263/460 tasks completed successfully)
 - **Composite Score**: 0.830 (excellent overall performance)
 - **Efficiency**: 0.860 (very efficient task completion)
 - **Transfer Rate**: 30.9% (moderate human escalation)
@@ -105,7 +107,21 @@ overall_score = (
 - **Wrong tool arguments**: 8.7% (16/184)
 - **Other issues**: 1.63% (3/184)
 
-##### **Airline Domain (Grok-3-mini)**
+##### **Retail Domain - GPT-4o-mini**
+- **Success Rate**: 32.6% (150/460 tasks completed successfully)
+- **Composite Score**: 0.814 (excellent overall performance)
+- **Efficiency**: 0.885 (very efficient task completion)
+- **Transfer Rate**: 2.8% (very low human escalation)
+- **Error Rate**: 1.86 errors per task on average
+
+**Error Analysis (855 total errors):**
+- **Tool failures**: 43.4% (371/855)
+- **Wrong arguments**: 35.9% (307/855)
+- **Rigid interpretation**: 8.8% (75/855)
+- **Policy violations**: 7.3% (62/855)
+- **Premature transfer**: 3.5% (30/855)
+
+##### **Airline Domain - Grok-3-mini**
 - **Success Rate**: 53.0% (106/200 tasks completed successfully)
 - **Composite Score**: 0.862 (excellent overall performance)
 - **Efficiency**: 0.855 (very efficient task completion)
@@ -122,13 +138,65 @@ overall_score = (
 - **Wrong tool calls**: 1.3% (1/77)
 - **Other issues**: 37.66% (29/77)
 
+##### **Airline Domain - GPT-4o-mini**
+- **Success Rate**: 26.0% (52/200 tasks completed successfully)
+- **Composite Score**: 0.836 (excellent overall performance)
+- **Efficiency**: 0.882 (very efficient task completion)
+- **Transfer Rate**: 18.0% (low human escalation)
+- **Error Rate**: 1.93 errors per task on average
+
+**Error Analysis (385 total errors):**
+- **Wrong arguments**: 35.1% (135/385)
+- **Tool failures**: 32.5% (125/385)
+- **Policy violations**: 13.5% (52/385)
+- **Premature transfer**: 8.1% (31/385)
+- **Rigid interpretation**: 6.8% (26/385)
+
 #### **Key Insights**
 
-1. **Domain Performance**: Grok-3-mini shows strong performance in both domains with composite scores above 0.83
+##### **Model Comparison Across Domains**
+
+**Retail Domain:**
+1. **Success Rate**: Grok-3-mini significantly outperforms GPT-4o-mini (57.2% vs 32.6%)
+2. **Composite Score**: Both models show excellent performance (0.830 vs 0.814)
+3. **Efficiency**: GPT-4o-mini shows slightly higher efficiency (0.885 vs 0.860)
+4. **Transfer Rate**: GPT-4o-mini has much lower human escalation (2.8% vs 30.9%)
+
+**Airline Domain:**
+1. **Success Rate**: Grok-3-mini significantly outperforms GPT-4o-mini (53.0% vs 26.0%)
+2. **Composite Score**: Both models show excellent performance (0.862 vs 0.836)
+3. **Efficiency**: GPT-4o-mini shows higher efficiency (0.882 vs 0.855)
+4. **Transfer Rate**: GPT-4o-mini has much higher human escalation (70.5% vs 18.0%)
+
+**Error Patterns:**
+- **Grok-3-mini (Retail)**: "Goal partially completed" (89.7%) and "Wrong arguments" (8.7%)
+- **GPT-4o-mini (Retail)**: "Tool failures" (43.4%) and "Wrong arguments" (35.9%)
+- **Grok-3-mini (Airline)**: "Goal partially completed" (61.0%) and "Other issues" (37.7%)
+- **GPT-4o-mini (Airline)**: "Wrong arguments" (35.1%) and "Tool failures" (32.5%)
+
+##### **Domain Performance (Grok-3-mini)**
+1. **Overall Performance**: Strong performance in both domains with composite scores above 0.83
 2. **Efficiency**: Consistently high efficiency scores (~0.86) indicate effective task completion
 3. **Transfer Patterns**: Airline domain has significantly higher human transfer rate (70.5% vs 30.9%), suggesting more complex scenarios
 4. **Error Patterns**: "Goal partially completed" is the dominant failure mode, indicating the model often gets close but doesn't fully complete tasks
 5. **Error Attribution**: Most failures are attributed to the agent rather than user or environment issues
+
+##### **Model Strengths and Weaknesses**
+
+**Grok-3-mini:**
+- **Strengths**: Consistently higher success rates across both domains (57.2% retail, 53.0% airline)
+- **Weaknesses**: High human transfer rates, especially in airline domain (70.5%)
+- **Pattern**: Better at completing tasks but requires more human intervention for complex scenarios
+
+**GPT-4o-mini:**
+- **Strengths**: Lower human transfer rates, higher efficiency scores, more independent operation
+- **Weaknesses**: Significantly lower success rates (32.6% retail, 26.0% airline)
+- **Pattern**: More independent but struggles with task completion, especially in airline domain
+
+**Domain-Specific Insights:**
+- **Retail**: Both models show good composite scores (>0.81), but Grok-3-mini has 24.6% higher success rate
+- **Airline**: Grok-3-mini has 27% higher success rate, but GPT-4o-mini has 52.5% lower transfer rate
+- **Error Patterns**: Different failure modes suggest different model characteristics and optimization strategies
 
 ## Original τ-bench Leaderboard
 
